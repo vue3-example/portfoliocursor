@@ -4,6 +4,9 @@
   "main": "src/index.js",
   "scripts": {
     "db:create": "node scripts/createDatabase.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "db:verify": "node scripts/verifyDatabase.js",
     "dev": "node src/index.js",
     "start": "NODE_ENV=production node src/index.js"
   },

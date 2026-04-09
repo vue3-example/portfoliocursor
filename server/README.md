@@ -14,7 +14,8 @@ npm run dev        # 개발 서버 실행 (기본 포트: 4000)
 ## 환경 변수
 
 - `PORT` : 서버 포트
-- `CORS_ORIGIN` : 허용할 프런트엔드 주소
+- `CORS_ORIGIN` : 허용할 프런트엔드 주소(복수 허용, 쉼표 구분)  
+  예: `http://127.0.0.1:5173,http://localhost:5173`
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` : PostgreSQL 연결 정보
 
 서버가 실행되면 다음 엔드포인트를 사용할 수 있습니다.
@@ -31,6 +32,18 @@ npm run dev        # 개발 서버 실행 (기본 포트: 4000)
 3. `DB_NAME` 에 지정한 데이터베이스가 실제로 존재하는지 확인  
    (현재 기본값: `coffee_order`)
 4. 서버 실행 후 `GET /api/health/db` 호출해서 연결 확인
+
+## SQL 실행
+
+```bash
+cd server
+npm run db:create   # DB 생성(없을 때만)
+npm run db:migrate  # 테이블/인덱스 생성
+npm run db:seed     # 기본 메뉴/옵션 데이터 입력
+```
+
+- 스키마 파일: `sql/001_schema.sql`
+- 시드 파일: `sql/002_seed.sql`
 
 ## 기술 스택
 

@@ -1,63 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const MENU_LIST = [
-  {
-    id: 'americano-ice',
-    name: '아메리카노(ICE)',
-    price: 4000,
-    description: '시원하고 깔끔한 맛의 기본 커피',
-    imageAlt: '얼음이 들어간 아이스 아메리카노 한 잔',
-    image: '/menu/americano-ice.jpg',
-  },
-  {
-    id: 'americano-hot',
-    name: '아메리카노(HOT)',
-    price: 4000,
-    description: '진한 향이 느껴지는 따뜻한 커피',
-    imageAlt: '따뜻한 흑커피(아메리카노) 한 잔',
-    image: '/menu/americano-hot.jpg',
-  },
-  {
-    id: 'cafe-latte',
-    name: '카페라떼',
-    price: 5000,
-    description: '부드러운 우유와 에스프레소의 조화',
-    imageAlt: '라떼 아트가 올라간 카페라떼 한 잔',
-    image: '/menu/cafe-latte.jpg',
-  },
-  {
-    id: 'vanilla-latte',
-    name: '바닐라라떼',
-    price: 5500,
-    description: '은은한 바닐라 풍미가 더해진 라떼',
-    imageAlt: '우유 거품이 올라간 바닐라 라떼 한 잔',
-    image: '/menu/vanilla-latte.jpg',
-  },
-]
-
-/** 관리자 재고 화면에 표시할 메뉴 (PRD 예시 3종) */
-const ADMIN_STOCK_MENU_IDS = ['americano-ice', 'americano-hot', 'cafe-latte']
-
-const OPTION_LIST = [
-  { id: 'shot', label: '샷 추가 (+500원)', price: 500 },
-  { id: 'syrup', label: '시럽 추가 (+0원)', price: 0 },
-]
-
-const ORDER_STATUS = {
-  RECEIVED: 'RECEIVED',
-  IN_PROGRESS: 'IN_PROGRESS',
-  COMPLETED: 'COMPLETED',
-}
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:4000'
+const ORDER_STATUS = { RECEIVED: 'RECEIVED', IN_PROGRESS: 'IN_PROGRESS', COMPLETED: 'COMPLETED' }
 const ORDER_STATUS_LABEL = {
-  [ORDER_STATUS.RECEIVED]: '주문 접수',
-  [ORDER_STATUS.IN_PROGRESS]: '제조 중',
-  [ORDER_STATUS.COMPLETED]: '제조 완료',
+  RECEIVED: '주문 접수',
+  IN_PROGRESS: '제조 중',
+  COMPLETED: '제조 완료',
 }
 
-const formatPrice = (price) => `${price.toLocaleString('ko-KR')}원`
-
+const formatPrice = (price) => `${Number(price || 0).toLocaleString('ko-KR')}원`
 const formatOrderDateTime = (timestamp) =>
   new Date(timestamp).toLocaleString('ko-KR', {
     year: 'numeric',
@@ -68,96 +20,102 @@ const formatOrderDateTime = (timestamp) =>
     hour12: false,
   })
 
-const buildOrderSummary = (lines) =>
-  lines
-    .map((line) => {
-      const opts = line.optionLabels.length > 0 ? ` (${line.optionLabels.join(', ')})` : ''
-      return `${line.menuName}${opts} x${line.quantity}`
-    })
-    .join(', ')
-
 const getStockBadge = (count) => {
   if (count === 0) return { label: '품절', className: 'stock-badge stock-badge--out' }
   if (count < 5) return { label: '주의', className: 'stock-badge stock-badge--warn' }
   return { label: '정상', className: 'stock-badge stock-badge--ok' }
 }
 
-/** cartKey 앞부분(menuId) 기준으로 메뉴별 수량 합산 */
 const getCartQtyByMenu = (cartItems) => {
   const map = {}
-  for (const item of cartItems) {
-    const menuId = item.menuId ?? item.cartKey.split(':')[0]
-    map[menuId] = (map[menuId] ?? 0) + item.quantity
-  }
+  for (const item of cartItems) map[item.menuId] = (map[item.menuId] ?? 0) + item.quantity
   return map
 }
 
-/**
- * 재고 객체에 포함된 메뉴만 검사.
- * 장바구니 해당 메뉴 합계가 재고보다 크면 부족으로 간주.
- */
-const findStockShortfalls = (cartItems, stockMap) => {
-  const byMenu = getCartQtyByMenu(cartItems)
-  const shortfalls = []
-  for (const [menuId, qty] of Object.entries(byMenu)) {
-    if (!Object.prototype.hasOwnProperty.call(stockMap, menuId)) continue
-    const available = stockMap[menuId] ?? 0
-    if (qty > available) {
-      const menu = MENU_LIST.find((m) => m.id === menuId)
-      shortfalls.push({
-        menuName: menu?.name ?? menuId,
-        orderQty: qty,
-        available,
-      })
-    }
-  }
-  return shortfalls
-}
-
-const formatStockShortfallNotice = (shortfalls) => {
-  const detail = shortfalls
+const formatStockShortfallNotice = (shortfalls) =>
+  `재고가 부족해 주문할 수 없습니다. (${shortfalls
     .map((s) => `${s.menuName}: 주문 ${s.orderQty}개, 재고 ${s.available}개`)
-    .join(' / ')
-  return `재고가 부족해 주문할 수 없습니다. (${detail})`
-}
+    .join(' / ')})`
 
-/** 해당 줄 수량을 1 늘릴 때, 메뉴 합계가 재고 상한을 넘지 않는지 */
-const canIncreaseCartLine = (item, cartItems, stockMap) => {
-  const menuId = item.menuId ?? item.cartKey.split(':')[0]
-  if (!Object.prototype.hasOwnProperty.call(stockMap, menuId)) return true
-  const byMenu = getCartQtyByMenu(cartItems)
-  const total = byMenu[menuId] ?? 0
-  const cap = stockMap[menuId] ?? 0
-  return total < cap
+async function fetchJson(path, options = {}) {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.message || '요청에 실패했습니다.')
+  return data
 }
 
 function App() {
   const [view, setView] = useState('order')
+  const [menus, setMenus] = useState([])
   const [selectedOptions, setSelectedOptions] = useState({})
   const [cartItems, setCartItems] = useState([])
-  const [isOrdering, setIsOrdering] = useState(false)
-  const [notice, setNotice] = useState('')
   const [orders, setOrders] = useState([])
+  const [notice, setNotice] = useState('')
+  const [isOrdering, setIsOrdering] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const [stock, setStock] = useState({
-    'americano-ice': 12,
-    'americano-hot': 3,
-    'cafe-latte': 0,
-  })
+  useEffect(() => {
+    document.title = 'COZY-커피 주문 앱'
+  }, [])
+
+  const loadMenus = useCallback(async () => {
+    const data = await fetchJson('/api/menus')
+    setMenus(data.menus ?? [])
+  }, [])
+
+  const loadOrders = useCallback(async () => {
+    const data = await fetchJson('/api/orders')
+    setOrders(
+      (data.orders ?? []).map((order) => ({
+        id: order.id,
+        summary: order.summary,
+        totalPrice: order.totalPrice,
+        status: order.status,
+        createdAt: order.orderedAt,
+      })),
+    )
+  }, [])
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        await Promise.all([loadMenus(), loadOrders()])
+      } catch {
+        setNotice('데이터를 불러오지 못했습니다. 다시 시도해 주세요.')
+      } finally {
+        setIsLoading(false)
+      }
+    })()
+  }, [loadMenus, loadOrders])
+
+  const stock = useMemo(() => {
+    const map = {}
+    for (const m of menus) map[m.id] = m.stockQuantity
+    return map
+  }, [menus])
 
   const stockMenus = useMemo(
-    () => ADMIN_STOCK_MENU_IDS.map((id) => MENU_LIST.find((m) => m.id === id)).filter(Boolean),
-    [],
+    () => menus.filter((m) => ['americano-ice', 'americano-hot', 'cafe-latte'].includes(m.id)),
+    [menus],
   )
+
+  const stockShortfalls = useMemo(() => {
+    const byMenu = getCartQtyByMenu(cartItems)
+    return Object.entries(byMenu)
+      .filter(([menuId, qty]) => typeof stock[menuId] === 'number' && qty > stock[menuId])
+      .map(([menuId, qty]) => ({
+        menuName: menus.find((m) => m.id === menuId)?.name ?? menuId,
+        orderQty: qty,
+        available: stock[menuId] ?? 0,
+      }))
+  }, [cartItems, stock, menus])
 
   const totalPrice = useMemo(
     () => cartItems.reduce((sum, item) => sum + item.totalPrice, 0),
     [cartItems],
-  )
-
-  const stockShortfalls = useMemo(
-    () => findStockShortfalls(cartItems, stock),
-    [cartItems, stock],
   )
 
   const dashboardCounts = useMemo(() => {
@@ -169,13 +127,9 @@ function App() {
   }, [orders])
 
   const sortedOrders = useMemo(
-    () => [...orders].sort((a, b) => b.createdAt - a.createdAt),
+    () => [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     [orders],
   )
-
-  useEffect(() => {
-    document.title = 'COZY-커피 주문 앱'
-  }, [])
 
   const toggleOption = (menuId, optionId) => {
     setSelectedOptions((prev) => {
@@ -194,12 +148,12 @@ function App() {
 
   const addToCart = (menu) => {
     const optionIds = (selectedOptions[menu.id] ?? []).sort()
-    const chosenOptions = OPTION_LIST.filter((option) => optionIds.includes(option.id))
+    const chosenOptions = (menu.options ?? []).filter((option) => optionIds.includes(option.id))
     const optionPrice = chosenOptions.reduce((sum, option) => sum + option.price, 0)
     const unitPrice = menu.price + optionPrice
     const optionKey = optionIds.join('|')
     const cartKey = `${menu.id}:${optionKey}`
-    const optionLabels = chosenOptions.map((option) => option.label.split(' (')[0])
+    const optionLabels = chosenOptions.map((option) => option.name)
 
     setCartItems((prev) => {
       const existingItem = prev.find((item) => item.cartKey === cartKey)
@@ -222,6 +176,7 @@ function App() {
           cartKey,
           menuId: menu.id,
           menuName: menu.name,
+          optionIds,
           optionLabels,
           quantity: 1,
           unitPrice,
@@ -263,33 +218,13 @@ function App() {
     })
   }
 
-  const registerOrder = useCallback((items, orderTotal) => {
-    const lines = items.map((item) => ({
-      menuName: item.menuName,
-      optionLabels: item.optionLabels,
-      quantity: item.quantity,
-      lineTotal: item.totalPrice,
-    }))
-    const summary = buildOrderSummary(lines)
-    const newOrder = {
-      id: globalThis.crypto?.randomUUID?.() ?? `ord-${Date.now()}`,
-      createdAt: Date.now(),
-      lines,
-      summary,
-      totalPrice: orderTotal,
-      status: ORDER_STATUS.RECEIVED,
-    }
-    setOrders((prev) => [newOrder, ...prev])
-  }, [])
-
   const handleOrder = async () => {
     if (cartItems.length === 0 || isOrdering) {
       return
     }
 
-    const shortfalls = findStockShortfalls(cartItems, stock)
-    if (shortfalls.length > 0) {
-      setNotice(formatStockShortfallNotice(shortfalls))
+    if (stockShortfalls.length > 0) {
+      setNotice(formatStockShortfallNotice(stockShortfalls))
       return
     }
 
@@ -297,26 +232,19 @@ function App() {
     setNotice('')
 
     try {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 700)
+      await fetchJson('/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          items: cartItems.map((item) => ({
+            menuId: item.menuId,
+            quantity: item.quantity,
+            optionIds: item.optionIds ?? [],
+          })),
+        }),
       })
-      const snapshot = [...cartItems]
-      const total = snapshot.reduce((s, i) => s + i.totalPrice, 0)
-      // 주문 성공 시 재고 차감: 재고 관리 대상 메뉴만 처리
-      const qtyByMenu = getCartQtyByMenu(snapshot)
-      setStock((prev) => {
-        const next = { ...prev }
-        for (const [menuId, qty] of Object.entries(qtyByMenu)) {
-          if (!Object.prototype.hasOwnProperty.call(prev, menuId)) continue
-          const current = prev[menuId] ?? 0
-          const after = current - qty
-          next[menuId] = after < 0 ? 0 : after
-        }
-        return next
-      })
-      registerOrder(snapshot, total)
       setCartItems([])
       setNotice('주문이 완료되었습니다.')
+      await Promise.all([loadMenus(), loadOrders()])
     } catch {
       setNotice('주문 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.')
     } finally {
@@ -324,35 +252,33 @@ function App() {
     }
   }
 
-  const adjustStock = (menuId, delta) => {
-    setStock((prev) => {
-      const current = prev[menuId] ?? 0
-      const next = current + delta
-      if (next < 0) {
-        return prev
-      }
-      return { ...prev, [menuId]: next }
-    })
+  const adjustStock = async (menuId, delta) => {
+    try {
+      await fetchJson(`/api/menus/${menuId}/stock`, {
+        method: 'PATCH',
+        body: JSON.stringify({ delta }),
+      })
+      await loadMenus()
+    } catch {
+      setNotice('재고 변경에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    }
   }
 
-  const advanceOrder = (orderId) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== orderId) return o
-        if (o.status === ORDER_STATUS.RECEIVED) {
-          return { ...o, status: ORDER_STATUS.IN_PROGRESS }
-        }
-        if (o.status === ORDER_STATUS.IN_PROGRESS) {
-          return { ...o, status: ORDER_STATUS.COMPLETED }
-        }
-        return o
-      }),
-    )
+  const advanceOrder = async (orderId, nextStatus) => {
+    try {
+      await fetchJson(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ nextStatus }),
+      })
+      await loadOrders()
+    } catch {
+      setNotice('주문 상태 변경에 실패했습니다. 다시 시도해 주세요.')
+    }
   }
 
   const getNextAction = (status) => {
-    if (status === ORDER_STATUS.RECEIVED) return { label: '제조 시작' }
-    if (status === ORDER_STATUS.IN_PROGRESS) return { label: '제조 완료' }
+    if (status === ORDER_STATUS.RECEIVED) return { label: '제조 시작', nextStatus: ORDER_STATUS.IN_PROGRESS }
+    if (status === ORDER_STATUS.IN_PROGRESS) return { label: '제조 완료', nextStatus: ORDER_STATUS.COMPLETED }
     return null
   }
 
@@ -378,29 +304,33 @@ function App() {
         </nav>
       </header>
 
-      {view === 'order' ? (
+      {isLoading ? (
+        <p className="notice">불러오는 중...</p>
+      ) : view === 'order' ? (
         <div className="order-page">
           <main className="menu-grid" aria-label="커피 메뉴 목록">
-            {MENU_LIST.map((menu) => {
+            {menus.map((menu) => {
               const checkedOptionIds = selectedOptions[menu.id] ?? []
 
               return (
                 <article className="menu-card" key={menu.id}>
-                  <img src={menu.image} alt={menu.imageAlt} className="menu-image" />
+                  <img src={menu.imageUrl} alt={`${menu.name} 이미지`} className="menu-image" />
                   <h2 className="menu-name">{menu.name}</h2>
                   <p className="menu-price">{formatPrice(menu.price)}</p>
                   <p className="menu-description">{menu.description}</p>
 
                   <fieldset className="option-group">
                     <legend className="sr-only">{menu.name} 옵션 선택</legend>
-                    {OPTION_LIST.map((option) => (
+                    {(menu.options ?? []).map((option) => (
                       <label key={option.id} className="option-item">
                         <input
                           type="checkbox"
                           checked={checkedOptionIds.includes(option.id)}
                           onChange={() => toggleOption(menu.id, option.id)}
                         />
-                        <span>{option.label}</span>
+                        <span>
+                          {option.name} (+{option.extraPrice}원)
+                        </span>
                       </label>
                     ))}
                   </fieldset>
@@ -422,7 +352,8 @@ function App() {
                 <ul className="cart-list">
                   {cartItems.map((item) => {
                     const lineLabel = `${item.menuName}${item.optionLabels.length > 0 ? ` (${item.optionLabels.join(', ')})` : ''}`
-                    const canInc = canIncreaseCartLine(item, cartItems, stock)
+                    const menuTotal = getCartQtyByMenu(cartItems)[item.menuId] ?? 0
+                    const canInc = typeof stock[item.menuId] !== 'number' ? true : menuTotal < stock[item.menuId]
                     return (
                       <li key={item.cartKey} className="cart-item">
                         <p className="item-name">{lineLabel}</p>
@@ -580,7 +511,7 @@ function App() {
                               <button
                                 type="button"
                                 className="primary-button table-action-btn"
-                                onClick={() => advanceOrder(order.id)}
+                                onClick={() => advanceOrder(order.id, action.nextStatus)}
                               >
                                 {action.label}
                               </button>
