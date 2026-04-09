@@ -302,6 +302,18 @@ function App() {
       })
       const snapshot = [...cartItems]
       const total = snapshot.reduce((s, i) => s + i.totalPrice, 0)
+      // 주문 성공 시 재고 차감: 재고 관리 대상 메뉴만 처리
+      const qtyByMenu = getCartQtyByMenu(snapshot)
+      setStock((prev) => {
+        const next = { ...prev }
+        for (const [menuId, qty] of Object.entries(qtyByMenu)) {
+          if (!Object.prototype.hasOwnProperty.call(prev, menuId)) continue
+          const current = prev[menuId] ?? 0
+          const after = current - qty
+          next[menuId] = after < 0 ? 0 : after
+        }
+        return next
+      })
       registerOrder(snapshot, total)
       setCartItems([])
       setNotice('주문이 완료되었습니다.')
