@@ -1,4 +1,6 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { pool, testDbConnection } from "./db.js";
@@ -9,6 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://127.0.0.1:5173";
 const ALLOWED_ORIGINS = CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UI_PUBLIC_DIR = path.resolve(__dirname, "../../ui/public");
 
 // CORS, JSON 파서 설정
 app.use(
@@ -26,7 +31,8 @@ app.use(
 app.use(express.json());
 
 // 정적 파일 제공
-app.use("/menu", express.static("public/menu"));
+app.use(express.static(UI_PUBLIC_DIR));
+app.use("/menu", express.static(path.join(UI_PUBLIC_DIR, "menu")));
 
 // 헬스 체크
 app.get("/api/health", (_, res) => {

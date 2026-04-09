@@ -2,10 +2,10 @@ BEGIN;
 
 INSERT INTO menus (id, name, description, price, image_url, stock_quantity)
 VALUES
-  ('americano-ice', '아메리카노(ICE)', '시원하고 깔끔한 맛의 기본 커피', 4000, '/menu/americano-ice.jpg', 12),
-  ('americano-hot', '아메리카노(HOT)', '진한 향이 느껴지는 따뜻한 커피', 4000, '/menu/americano-hot.jpg', 3),
-  ('cafe-latte', '카페라떼', '부드러운 우유와 에스프레소의 조화', 5000, '/menu/cafe-latte.jpg', 0),
-  ('vanilla-latte', '바닐라라떼', '은은한 바닐라 풍미가 더해진 라떼', 5500, '/menu/vanilla-latte.jpg', 8)
+  ('americano-ice', '아메리카노(ICE)', '시원하고 깔끔한 맛의 기본 커피', 4000, '/americano-ice.png', 12),
+  ('americano-hot', '아메리카노(HOT)', '진한 향이 느껴지는 따뜻한 커피', 4000, '/americano-hot.jpg', 3),
+  ('cafe-latte', '카페라떼', '부드러운 우유와 에스프레소의 조화', 5000, '/cafe-latte.jpg', 0),
+  ('vanilla-latte', '바닐라라떼', '은은한 바닐라 풍미가 더해진 라떼', 5500, '/vanilla-latte.jpg', 8)
 ON CONFLICT (id) DO UPDATE
 SET
   name = EXCLUDED.name,
