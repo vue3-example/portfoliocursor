@@ -307,3 +307,100 @@
 - 주문 취소/환불 처리
 - 재고 이력(감사 로그) 상세 조회
 - 다중 매장 관리, 알림/푸시, 통계 차트 고도화
+
+## 6. 백엔드 PRD (데이터 모델 및 API)
+
+### 6.1 데이터 모델 개요
+
+- **Menus**: 커피 메뉴 정보 및 재고
+  - `id` (PK, UUID 또는 bigserial): 메뉴 식별자
+  - `name` (varchar, not null): 커피 이름
+  - `description` (text, nullable): 설명
+  - `price` (integer, not null): 기본 가격(원 단위)
+  - `image_url` (text, nullable): 이미지 URL
+  - `stock_quantity` (integer, not null, default 0): 현재 재고 개수
+  - `created_at` (timestamptz, not null)
+  - `updated_at` (timestamptz, not null)
+- **Options**: 메뉴별 옵션 정보
+  - `id` (PK)
+  - `menu_id` (FK → Menus.id, not null): 연결할 메뉴
+  - `name` (varchar, not null): 옵션 이름 (예: 샷 추가)
+  - `extra_price` (integer, not null, default 0): 옵션 추가 금액
+  - `created_at` (timestamptz, not null)
+  - `updated_at` (timestamptz, not null)
+- **Orders**: 주문 헤더
+  - `id` (PK)
+  - `ordered_at` (timestamptz, not null, default now()): 주문 일시
+  - `status` (varchar, not null): 주문 상태
+    - 값: `RECEIVED`(주문 접수), `IN_PROGRESS`(제조 중), `COMPLETED`(완료)
+  - `total_price` (integer, not null): 주문 총 금액
+  - `created_at` (timestamptz, not null)
+  - `updated_at` (timestamptz, not null)
+- **OrderItems**: 주문 상세(메뉴/옵션/수량)
+  - `id` (PK)
+  - `order_id` (FK → Orders.id, not null)
+  - `menu_id` (FK → Menus.id, not null)
+  - `menu_name_snapshot` (varchar, not null): 주문 시점 메뉴 이름
+  - `unit_price` (integer, not null): 1잔 가격(메뉴 + 옵션)
+  - `quantity` (integer, not null)
+  - `line_price` (integer, not null): `unit_price * quantity`
+  - `option_names_snapshot` (text, nullable): 선택 옵션 이름 목록 문자열
+  - `created_at` (timestamptz, not null)
+
+### 6.2 데이터 흐름 (사용자 플로우 기준)
+
+1. **메뉴 조회**
+   - 서버는 Menus(+Options)를 읽어 주문 화면/관리자 화면에 전달한다.
+   - 주문 화면: 이름, 설명, 가격, 이미지, 옵션 정보만 사용.
+   - 관리자 화면: Menus의 `stock_quantity`로 재고 상태를 표시한다.
+2. **장바구니 구성**
+   - 사용자가 앱 화면에서 커피 메뉴와 옵션을 선택해 장바구니에 담는다.
+   - 이 단계에서는 서버에 저장하지 않고, 프런트 상태로만 유지해도 된다.
+3. **주문 생성**
+   - 사용자가 `주문하기` 버튼을 누르면, 프런트는 장바구니(메뉴, 수량, 옵션, 예상 금액)를 주문 생성 API로 보낸다.
+   - 서버는 Menus/Options를 기준으로 **실제 금액을 재계산**하고,
+     - 메뉴별 주문 수량 합계가 Menus.stock_quantity보다 크면 **주문 실패**로 응답한다.
+     - 아니면 Orders + OrderItems에 저장하고 Menus.stock_quantity를 수량만큼 차감한다.
+   - Orders의 초기 상태는 항상 `RECEIVED`이다.
+4. **주문 현황 표시**
+   - 관리자 화면 진입 시 서버에서 Orders(+OrderItems 요약)를 조회해 `주문 현황`에 보여 준다.
+   - 표시 내용: 주문 일시, 주문 내용 요약(메뉴/옵션/수량), 금액, 상태.
+5. **주문 상태 변경**
+   - 관리자가 주문 상태 변경 버튼을 누르면 상태 변경 API를 호출한다.
+   - 상태 흐름: `RECEIVED → IN_PROGRESS → COMPLETED` 순서만 허용한다.
+   - 상태 변경 후 Orders 상태가 갱신되고, 관리자 화면의 주문 현황과 대시보드 집계가 갱신된다.
+
+### 6.3 API 설계 개요
+
+1. **메뉴 목록 조회 API**
+   - 메서드/URL: `GET /api/menus`
+   - 역할: Menus + Options를 조회하여
+     - 주문 화면: 이름/설명/가격/이미지/옵션
+     - 관리자 화면: 재고 수량까지 포함해 내려준다.
+2. **주문 생성 API**
+   - 메서드/URL: `POST /api/orders`
+   - 요청 바디(예시 개념):
+     - `items[]`: `{ menuId, quantity, optionIds[] }` 배열
+   - 처리:
+     - Menus/Options로부터 실제 가격 계산
+     - 재고 부족 시 `400 Bad Request` + 부족 메뉴 정보 반환
+     - 성공 시 Orders + OrderItems 생성, Menus.stock_quantity 차감
+   - 응답:
+     - 생성된 주문 ID, 주문 시간, 총 금액, 상태(`RECEIVED`)
+3. **주문 목록 조회 API**
+   - 메서드/URL: `GET /api/orders`
+   - 옵션: `status`(필터), `limit/offset`(선택)
+   - 역할: 관리자 화면 `주문 현황`에 필요한 주문 리스트(주문 일시, 요약 문자열, 금액, 상태)를 제공한다.
+4. **단일 주문 상세 조회 API**
+   - 메서드/URL: `GET /api/orders/:orderId`
+   - 역할: 특정 주문의 헤더 + 상세(메뉴/수량/옵션/금액)를 반환해 상세 팝업/디버깅 등에 사용한다.
+5. **주문 상태 변경 API**
+   - 메서드/URL: `PATCH /api/orders/:orderId/status`
+   - 요청 바디: `nextStatus` (`IN_PROGRESS` 또는 `COMPLETED`)
+   - 규칙:
+     - `RECEIVED → IN_PROGRESS`, `IN_PROGRESS → COMPLETED` 만 허용.
+     - 그 외 전이는 400 에러로 거부.
+6. **재고 수정 API (관리자)**
+   - 메서드/URL: `PATCH /api/menus/:menuId/stock`
+   - 요청 바디: `delta` (정수, 예: `+1` / `-1`)
+   - 역할: 관리자 화면 재고 카드의 `+ / -` 버튼과 연결해 Menus.stock_quantity를 증감시키며, 0 미만은 허용하지 않는다.
