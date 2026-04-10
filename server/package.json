@@ -1,7 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "./src/index.js",
   "scripts": {
     "db:create": "node scripts/createDatabase.js",
     "db:migrate": "node scripts/migrate.js",
