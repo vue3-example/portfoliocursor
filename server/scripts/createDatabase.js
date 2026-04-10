@@ -1,6 +1,20 @@
 import "dotenv/config";
 import { Client } from "pg";
 
+function getSslConfig() {
+  const sslMode = process.env.DB_SSL?.toLowerCase();
+  const shouldUseSsl =
+    sslMode === "true" ||
+    sslMode === "1" ||
+    process.env.DB_HOST?.includes("render.com");
+
+  if (!shouldUseSsl) {
+    return undefined;
+  }
+
+  return { rejectUnauthorized: false };
+}
+
 async function main() {
   const name = process.env.DB_NAME;
   if (!name) {
@@ -13,6 +27,7 @@ async function main() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: "postgres",
+    ssl: getSslConfig(),
   });
 
   await client.connect();

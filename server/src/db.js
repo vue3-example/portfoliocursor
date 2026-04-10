@@ -8,12 +8,27 @@ for (const key of requiredEnvKeys) {
   }
 }
 
+function getSslConfig() {
+  const sslMode = process.env.DB_SSL?.toLowerCase();
+  const shouldUseSsl =
+    sslMode === "true" ||
+    sslMode === "1" ||
+    process.env.DB_HOST?.includes("render.com");
+
+  if (!shouldUseSsl) {
+    return undefined;
+  }
+
+  return { rejectUnauthorized: false };
+}
+
 export const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT),
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: getSslConfig(),
   max: 10,
   idleTimeoutMillis: 30000,
 });
