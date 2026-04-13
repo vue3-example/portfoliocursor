@@ -12,6 +12,9 @@
 #   - key: DATABASE_URL
 #     sync: false
 # 로 바꾸세요.
+#
+# 무료 플랜 Web Service는 preDeployCommand(배포 전 마이그레이션)를 지원하지 않습니다.
+# DB 준비 후: order-api → Shell 에서 `cd server && npm run db:migrate` 를 한 번 실행하세요.
 
 services:
   - type: web
@@ -20,7 +23,6 @@ services:
     plan: free
     buildCommand: cd server && npm install
     startCommand: cd server && npm start
-    preDeployCommand: cd server && npm run db:migrate
     healthCheckPath: /api/health
     buildFilter:
       paths:
