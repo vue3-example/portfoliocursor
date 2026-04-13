@@ -14,7 +14,10 @@
 # 로 바꾸세요.
 #
 # 무료 플랜 Web Service는 preDeployCommand(배포 전 마이그레이션)를 지원하지 않습니다.
-# DB 준비 후: order-api → Shell 에서 `cd server && npm run db:migrate` 를 한 번 실행하세요.
+# Shell이 안 되는 경우: order-api에 AUTO_MIGRATE/AUTO_SEED 환경변수를 잠깐 켜고
+# 재배포하면, 서버 부팅 시 sql 파일을 적용합니다.
+#   AUTO_MIGRATE=true  → server/sql/001_schema.sql 적용
+#   AUTO_SEED=true     → server/sql/002_seed.sql 적용
 
 services:
   - type: web
@@ -36,6 +39,10 @@ services:
           property: connectionString
       - key: CORS_ORIGIN
         sync: false
+      - key: AUTO_MIGRATE
+        value: "true"
+      - key: AUTO_SEED
+        value: "true"
 
   - type: web
     name: order-ui

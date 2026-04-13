@@ -1,5 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
@@ -14,6 +15,28 @@ const ALLOWED_ORIGINS = CORS_ORIGIN.split(",").map((origin) => origin.trim()).fi
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UI_PUBLIC_DIR = path.resolve(__dirname, "../../ui/public");
+
+async function applySqlFile(relativePath, label) {
+  const filePath = path.resolve(__dirname, relativePath);
+  const sql = await readFile(filePath, "utf8");
+  await pool.query(sql);
+  console.log(`${label} applied: ${relativePath}`);
+}
+
+async function maybeInitDatabase() {
+  const autoMigrate = String(process.env.AUTO_MIGRATE ?? "").toLowerCase() === "true";
+  const autoSeed = String(process.env.AUTO_SEED ?? "").toLowerCase() === "true";
+
+  if (!autoMigrate && !autoSeed) return;
+
+  // 스키마/시드는 idempotent(IF NOT EXISTS / ON CONFLICT)라 재시작 시에도 안전합니다.
+  if (autoMigrate) {
+    await applySqlFile("../sql/001_schema.sql", "Migration");
+  }
+  if (autoSeed) {
+    await applySqlFile("../sql/002_seed.sql", "Seed");
+  }
+}
 
 // CORS, JSON 파서 설정
 app.use(
@@ -438,6 +461,7 @@ app.listen(PORT, async () => {
   try {
     await testDbConnection();
     console.log("PostgreSQL connection established.");
+    await maybeInitDatabase();
   } catch (error) {
     console.error("PostgreSQL connection failed:", error.message);
   }
