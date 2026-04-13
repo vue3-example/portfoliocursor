@@ -10,10 +10,10 @@ const app = express();
 
 // 환경 변수 또는 기본값
 const PORT = process.env.PORT || 4000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://127.0.0.1:5173";
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
+const ALLOW_ALL_ORIGINS = CORS_ORIGIN === "*";
 const normalizeOrigin = (value) => String(value || "").trim().replace(/\/+$/, "");
 const ALLOWED_ORIGINS = CORS_ORIGIN.split(",").map(normalizeOrigin).filter(Boolean);
-const ALLOW_RENDER_DOMAINS = String(process.env.ALLOW_RENDER_DOMAINS || "true").toLowerCase() === "true";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UI_PUBLIC_DIR = path.resolve(__dirname, "../../ui/public");
@@ -44,6 +44,11 @@ async function maybeInitDatabase() {
 app.use(
   cors({
     origin(origin, callback) {
+      if (ALLOW_ALL_ORIGINS) {
+        callback(null, true);
+        return;
+      }
+
       if (!origin) {
         callback(null, true);
         return;
@@ -51,10 +56,8 @@ app.use(
 
       const normalizedOrigin = normalizeOrigin(origin);
       const isExplicitlyAllowed = ALLOWED_ORIGINS.includes(normalizedOrigin);
-      const isRenderDomain =
-        ALLOW_RENDER_DOMAINS && /^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(normalizedOrigin);
 
-      if (isExplicitlyAllowed || isRenderDomain) {
+      if (isExplicitlyAllowed) {
         callback(null, true);
         return;
       }
