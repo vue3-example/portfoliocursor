@@ -1,10 +1,13 @@
 import { Pool } from "pg";
 
-const requiredEnvKeys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"];
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
-for (const key of requiredEnvKeys) {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
+if (!hasDatabaseUrl) {
+  const requiredEnvKeys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"];
+  for (const key of requiredEnvKeys) {
+    if (!process.env[key]) {
+      throw new Error(`Missing required environment variable: ${key}`);
+    }
   }
 }
 
@@ -23,11 +26,12 @@ function getSslConfig() {
 }
 
 export const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  connectionString: process.env.DATABASE_URL,
+  host: hasDatabaseUrl ? undefined : process.env.DB_HOST,
+  port: hasDatabaseUrl ? undefined : Number(process.env.DB_PORT),
+  database: hasDatabaseUrl ? undefined : process.env.DB_NAME,
+  user: hasDatabaseUrl ? undefined : process.env.DB_USER,
+  password: hasDatabaseUrl ? undefined : process.env.DB_PASSWORD,
   ssl: getSslConfig(),
   max: 10,
   idleTimeoutMillis: 30000,
