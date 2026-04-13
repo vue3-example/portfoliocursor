@@ -1,0 +1,55 @@
+# Render Blueprint — https://docs.render.com/docs/infrastructure-as-code
+#
+# [최초 적용 시] sync: false 로 표시된 값은 대시보드에서 입력합니다.
+#   CORS_ORIGIN        → 정적 사이트 공개 URL (예: https://order-ui-xxxx.onrender.com)
+#   VITE_API_BASE_URL  → API 공개 URL (예: https://order-api-xxxx.onrender.com)
+# Render는 Blueprint 안에서 서비스 URL끼리 자동 치환을 하지 않습니다.
+#
+# API 서비스에 rootDir: server 를 쓰지 않습니다. (모노레포에서 rootDir 밖 파일은
+# 빌드/런타임에 포함되지 않아, server 가 참조하는 ui/public 정적 파일이 사라집니다.)
+#
+# 외부 DB만 쓰는 경우: 아래 databases 블록을 제거하고, DATABASE_URL 을
+#   - key: DATABASE_URL
+#     sync: false
+# 로 바꾸세요.
+
+services:
+  - type: web
+    name: order-api
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    preDeployCommand: cd server && npm run db:migrate
+    healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - server/**
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: order-db
+          property: connectionString
+      - key: CORS_ORIGIN
+        sync: false
+
+  - type: web
+    name: order-ui
+    runtime: static
+    rootDir: ui
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    buildFilter:
+      paths:
+        - ui/**
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_API_BASE_URL
+        sync: false
+
+databases:
+  - name: order-db
+    plan: free
